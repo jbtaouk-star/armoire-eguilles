@@ -1,0 +1,51 @@
+const CACHE_PREFIX = 'pharmaarmoire-eguilles-';
+const CACHE_NAME = CACHE_PREFIX + 'v1';
+const URLS_TO_CACHE = [
+  '/armoire-eguilles/',
+  '/armoire-eguilles/index.html'
+];
+
+// Install: cache the app
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function(cache) {
+      console.log('SW: caching app');
+      return cache.addAll(URLS_TO_CACHE);
+    })
+  );
+  self.skipWaiting();
+});
+
+// Activate: clean old caches (only those of Eguilles — never touch Florans' cache on the same domain)
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(keys) {
+      return Promise.all(
+        keys.filter(function(key) { return key.indexOf(CACHE_PREFIX) === 0 && key !== CACHE_NAME; })
+            .map(function(key) { return caches.delete(key); })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// Fetch: network first, cache fallback when offline
+self.addEventListener('fetch', function(event) {
+  event.respondWith(
+    fetch(event.request)
+      .then(function(response) {
+        var responseClone = response.clone();
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      })
+      .catch(function() {
+        return caches.open(CACHE_NAME).then(function(cache) {
+          return cache.match(event.request).then(function(cached) {
+            return cached || cache.match('/armoire-eguilles/');
+          });
+        });
+      })
+  );
+});
